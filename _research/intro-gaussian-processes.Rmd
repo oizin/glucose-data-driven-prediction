@@ -1,0 +1,232 @@
+---
+title: "Gaussian Processes"
+output: html_notebook
+---
+
+# Introduction
+
+Step 0: Generate some data
+
+```{r}
+set.seed(10)
+N <- 20
+x <- runif(N,min=0,max=24)
+e <- rnorm(N)
+y <- sin(0.5*x) + e
+plot(x,y,pch=20)
+xs <- seq(min(x),max(x),by=0.1)
+lines(xs,sin(0.5*xs),col="blue")
+```
+
+Step 1: Sample from the prior
+
+```{r}
+## FUNCTIONS
+# kernel matrix
+k_exp <- function(x1,x2,tau2,l2) tau2*exp(-(sum((x1 - x2)^2))*(1/(2*l2)))
+compute_K <- function(x,k,...) {
+  N <- length(x) # assume input is a vector
+  K <- matrix(nrow=N,ncol=N)
+  for (i in 1:N) {
+    for (j in 1:N){
+      if (j <= i) {
+        K[j,i] <- K[i,j] <- k(x[i],x[j],...)
+      }
+    }
+  }
+  K
+}
+compute_k <- function(x,x1,k,...) {
+  N <- length(x)
+  k_out <- numeric(length=N)
+  for (i in 1:N) {
+    k_out[i] <- k(x[i],x1,...)
+  }
+  k_out
+}
+```
+
+
+```{r}
+K1 <- compute_K(xs,k_exp,0.5,0.5)
+ysamp <- MASS::mvrnorm(n = 5,rep(0,length(xs)),Sigma=K1)
+plot(xs,ysamp[1,],type="l")
+for (i in 2:nrow(ysamp)) {
+  lines(xs,ysamp[i,],col=i)
+}
+```
+
+Step 2: filter and predict
+
+Filter
+
+```{r}
+K1 <- compute_K(x,k_exp,0.5,0.5)
+sig <- 1
+K1a <- K1 + diag(sig,ncol=ncol(K1),nrow=nrow(K1))
+K1a_inv <- solve(K1a)
+yf <- numeric(length=length(x))
+for (i in 1:length(yf)) {
+  yf[i] <- K1[i,] %*% K1a_inv %*% y
+}
+plot(x,yf)
+points(x,y,col="red")
+
+```
+
+Predict
+
+```{r}
+
+x_new <- xs
+y_ <- numeric(length = length(x_new))
+for (i in 1:length(x_new)) {
+  kv <- compute_k(x,x_new[i],k_exp,tau2=0.5,l2=0.5)
+  y_[i] <- t(kv) %*% K1a_inv %*% y
+}
+plot(xs,y_,type="l",col="lightblue",ylim=c(-1,1))
+points(x,y,pch=20)
+points(x,yf,pch=20,col="lightblue")
+lines(xs,sin(0.5*xs),col="blue")
+```
+
+Step 3: uncertainty
+
+the nice thing about gaussian processes is the probabilistic framework which gives us uncertainty estimates for free. Here we show distribution
+
+```{r}
+
+sig_ <- numeric(length = length(x_new))
+for (i in 1:length(x_new)) {
+  c1 <- k_exp(x_new,x_new,tau2=0.5,l2=0.5) + sig
+  kv <- compute_k(x,x_new[i],k_exp,tau2=0.5,l2=0.5)
+  sig_[i] <- c1 - t(kv) %*% K1a_inv %*% kv
+}
+
+plot(xs,y_,type="l",col="lightblue",ylim=c(-4,4))
+points(x,y,pch=20)
+points(x,yf,pch=20,col="lightblue")
+lines(xs,sin(0.5*xs),col="blue")
+
+x_coord <- c(x_new,rev(x_new))
+y_coord <- c(y_+2*sqrt(sig_),
+             rev(y_-2*sqrt(sig_)))
+polygon(x_coord,y_coord,col=rgb(0.1, 0.1, 0.1,0.1),border=NA)
+```
+
+Step 4: learn the hyperparameters
+
+```{r}
+# marginal likelihood of GP
+lik <- function(y,sigma2,x,...) {
+  K <- compute_K(x,...)
+  N <- length(y)
+  Ks <- K + sigma2*diag(1,nrow=N,ncol=N)
+  t1 <- det(K + sigma2*diag(1,nrow=N,ncol=N))
+  t2 <- K
+  out <- -(N/2)*log(pi) - 0.5*log(det(Ks)) - 0.5*t(y) %*% solve(Ks) %*% y
+  as.vector(out)
+}
+
+# fix sigma = 1 (the truth)
+# evaluate tau2 and l2 on a grid
+lik_grid <- expand.grid(tau2 = seq(from = 0.1,to = 2,by = 0.1),l2 = seq(from = 0.1,to = 2,by = 0.1))
+lik_grid$lik <- NA
+x_sc <- scale(x)
+for (i in 1:nrow(lik_grid)) {
+  lik_grid$lik[i] <- lik(y,1,x_sc,k=k_exp,tau2=lik_grid$tau2[i],l2=lik_grid$l2[i])
+}
+
+library(ggplot2)
+ggplot(lik_grid) +
+  geom_raster(aes(x = tau2, y = l2, fill = lik))
+```
+
+```{r}
+K1 <- compute_K(x_sc,k_exp,0.25,0.1)
+sig <- 1
+K1a <- K1 + diag(sig,ncol=ncol(K1),nrow=nrow(K1))
+K1a_inv <- solve(K1a)
+
+x_new <- seq(-2,2,0.1)
+y_ <- numeric(length = length(x_new))
+for (i in 1:length(x_new)) {
+  kv <- compute_k(x_sc,x_new[i],k_exp,tau2=0.25,l2=0.1)
+  y_[i] <- t(kv) %*% K1a_inv %*% y
+}
+
+x_new1 <- x_new*attributes(x_sc)[[3]][1] + attributes(x_sc)[[2]][1]
+
+plot(x_new1,y_,ylim = c(-2,2),type = "l",col="blue")
+points(x,y)
+lines(x_new1,sin(0.5*x_new1))
+```
+
+
+
+
+# Appendix
+
+## linear kernel
+
+```{r}
+y = 2*x + rnorm(100)
+
+
+K = (x %*% t(x ))
+Kinv = solve(K + diag(ncol(K)) * 0.0001)
+plot(x,y,col="lightblue",pch=20)
+
+yhat <- numeric(100)
+for (i in 1:100) {
+  yhat[i] <-   t(x * (x[i] )) %*% Kinv %*% y
+}
+lines(x,yhat ,col="red")
+```
+
+## quadratic kernel
+
+```{r}
+x <- rnorm(100)
+y = 2*x + x^2 + rnorm(100)
+K <- matrix(nrow = 100,ncol = 100)
+for (i in 1:N) {
+  K[i,] <- (x[i]*x + 1)^2
+}
+Kinv = solve(K + diag(ncol(K)) * 0.001)
+plot(x,y,col="lightblue",pch=20)
+
+yhat <- numeric(100)
+for (i in 1:100) {
+  yhat[i] <-   t(((x * x[i]) + 1)^2) %*% Kinv %*% y
+}
+points(x,yhat ,col="red")
+```
+
+## Sample from prior: kernel with exponential and linear
+
+```{r}
+# kernel
+k_eq <- function(x1,x2,t0,t1,t2,t3,t4) {
+  t0*exp(-(t1/2)*sum((x1-x2)^2)) + t2 + t3*sum(x1*x2) + t4*sum(x1*x2*x1*x2)
+}
+
+N <- 1000
+x <- seq(-10,10,length.out = N)
+
+K <- matrix(nrow = N,ncol = N)
+for (i in 1:N) {
+  for (j in 1:N) {
+    K[i,j] <- k_eq(x[i],x[j],1,1,1,5,0.02)
+  }
+}
+```
+
+```{r}
+ysamp <- MASS::mvrnorm(n = 10,rep(0,N),Sigma=K)
+plot(x,ysamp[1,],pch=20,ylim=c(-20,20))
+for (i in 2:nrow(ysamp)) {
+  points(x,ysamp[i,],col=i,pch=20)
+}
+
+```
