@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+data/
+glucose-physionet.Rproj
+papers/
+plots/
+README.html
