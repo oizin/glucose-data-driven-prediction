@@ -55,3 +55,7 @@ The numbers in the table can be found by running the file `./scripts/table1.R`
 # Appendices
 
 The hypoglycaemia prediction model code is found in `./scripts/appendices/hypoglycaemia-discrete-time-models.R`
+
+# Get in touch
+
+If you have any issues running the code feel free to get in touch through opening an issue. 
