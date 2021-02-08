@@ -31,11 +31,11 @@ evaluation_plots_outcome <- function(folder_path,dt,model_name,print_plot=FALSE)
   }
   
   # compare distributions
-  p <- ggplot(dt, aes(glucose_b_shift1, glucose_bst)) + 
+  p <- ggplot(dt[glucose_b_shift1 < 1000], aes(x=glucose_b_shift1, y=glucose_bst)) + 
     geom_point(alpha = 0.1) + 
-    theme_classic() +
+    theme_classic(base_size = 16) +
     geom_abline(intercept = 0,slope = 1,col="red",linetype=2) +
-    labs(x = "Predicted blood glucose (mg/dL)","Measured blood glucose (mg/dL)")
+    labs(y = "Predicted blood glucose (mg/dL)",x="Measured blood glucose (mg/dL)")
   p <- ggExtra::ggMarginal(p, type = "histogram",size=3,binwidth=20)
   if (print_plot == TRUE) print(p)
   ggsave(plot = p,filename = paste0(folder_path,"/Prediction_dist_",model_name,".png"),width  = 10,height = 5)
@@ -43,7 +43,7 @@ evaluation_plots_outcome <- function(folder_path,dt,model_name,print_plot=FALSE)
   # compare error distributions
   p = ggplot(dt,aes(x = error1)) +
     geom_histogram(col="white",fill="lightblue",binwidth=10) +
-    theme_minimal(base_size = 14) +
+    theme_minimal(base_size = 16) +
     coord_cartesian(xlim=c(-250,250)) +
     labs(x = "Prediction error")
   if (print_plot == TRUE) print(p)
@@ -146,17 +146,66 @@ evaluation_plots_outcome <- function(folder_path,dt,model_name,print_plot=FALSE)
   if (print_plot == TRUE) print(p)
   ggsave(plot = p,filename = paste0(folder_path,"/MSE_by_outcome_",model_name,".png"),width = 8,height = 5)
   
-  # MSE by diagnosis
-  tmp = dt[tstep > 0,.(MSE=sqrt(mean(error2)),.N),by=diagnosis]
-  p = ggplot(tmp[N>200],aes(x = factor(diagnosis),y = MSE)) +
+  # MSE by diagnosis - order by frequency
+  tmp = dt[tstep > 0 & glucose_b_shift1 < 1000,.(MSE=sqrt(mean(error2)),.N),by=diagnosis]
+  NN <- sum(tmp$N)
+  tmp = tmp[order(-N)]
+  tmp[,diagnosis := paste0(diagnosis," (",format(round(100*N/NN,1),digits=1),"%)")]
+  tmp$diagnosis <- factor(tmp$diagnosis,levels=rev(tmp$diagnosis),ordered=TRUE)
+  p = ggplot(tmp[1:30],aes(x = factor(diagnosis),y = MSE)) +
     geom_point() +
     coord_cartesian(ylim=c(0,80)) +
-    scale_y_continuous(breaks = seq(0,200,20)) +
+    scale_y_continuous(breaks = seq(0,80,10)) +
     theme_minimal(base_size = 16) +
     labs(x = "Patient diagnosis",y = "RMSE (mg/dL)") + 
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=5))
+    theme(axis.text.x = element_text(size=12)) +
+    geom_hline(yintercept=49.9,linetype=2,col="red") +
+    coord_flip()
+    
   if (print_plot == TRUE) print(p)
   ggsave(plot = p,filename = paste0(folder_path,"/MSE_by_diagnosis_",model_name,".png"),width = 8,height = 5)
+  
+  
+  # MSE by diagnosis - order by good performance
+  tmp = dt[tstep > 0 & glucose_b_shift1 < 1000,.(MSE=sqrt(mean(error2)),.N),by=diagnosis]
+  tmp <- tmp[N > 100]
+  NN <- sum(tmp$N)
+  tmp = tmp[order(-MSE)]
+  tmp[,diagnosis := paste0(diagnosis," (",format(round(100*N/NN,1),digits=1),"%)")]
+  tmp$diagnosis <- factor(tmp$diagnosis,levels=rev(tmp$diagnosis),ordered=TRUE)
+  p = ggplot(tmp[1:30],aes(x = factor(diagnosis),y = MSE)) +
+    geom_point() +
+    coord_cartesian(ylim=c(0,80)) +
+    scale_y_continuous(breaks = seq(0,80,10)) +
+    theme_minimal(base_size = 16) +
+    labs(x = "Patient diagnosis",y = "RMSE (mg/dL)") + 
+    theme(axis.text.x = element_text(size=12)) +
+    geom_hline(yintercept=49.9,linetype=2,col="red") +
+    coord_flip()
+  
+  if (print_plot == TRUE) print(p)
+  ggsave(plot = p,filename = paste0(folder_path,"/MSE_by_diagnosis_good_",model_name,".png"),width = 8,height = 5)
+  
+  
+  # MSE by diagnosis - order by bad performance
+  tmp = dt[tstep > 0 & glucose_b_shift1 < 1000,.(MSE=sqrt(mean(error2)),.N),by=diagnosis]
+  tmp <- tmp[N > 100]
+  NN <- sum(tmp$N)
+  tmp = tmp[order(MSE)]
+  tmp[,diagnosis := paste0(strtrim(diagnosis,80)," (",format(round(100*N/NN,1),digits=1),"%)")]
+  tmp$diagnosis <- factor(tmp$diagnosis,levels=rev(tmp$diagnosis),ordered=TRUE)
+  p = ggplot(tmp[1:30],aes(x = factor(diagnosis),y = MSE)) +
+    geom_point() +
+    #coord_cartesian(ylim=c(0,80)) +
+    scale_y_continuous(breaks = seq(0,80,10)) +
+    theme_minimal(base_size = 16) +
+    labs(x = "Patient diagnosis",y = "RMSE (mg/dL)") + 
+    theme(axis.text.x = element_text(size=12)) +
+    geom_hline(yintercept=49.9,linetype=2,col="red") +
+    coord_flip(ylim = c(0,80))
+  
+  if (print_plot == TRUE) print(p)
+  ggsave(plot = p,filename = paste0(folder_path,"/MSE_by_diagnosis_bad_",model_name,".png"),width = 8,height = 5)
   
   # MSE by admission type
   tmp = dt[tstep > 0,.(MSE=sqrt(mean(error2)),.N),by=admission_type]

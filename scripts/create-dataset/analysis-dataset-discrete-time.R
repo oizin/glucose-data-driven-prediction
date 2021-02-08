@@ -2,7 +2,7 @@
 #
 # Glycaemic control in the ICU
 # Create glucose prediction analysis dataset: discrete time version
-# 
+#
 # Contents:
 # a) CREATE FEATURES
 # b) Make DISCRETE
@@ -14,7 +14,6 @@
 # Init: Oisin (27/08/2020)
 ###########################################################################################
 
-rm(list = ls()); gc()
 
 # Make the data discrete with a step every:
 LENGTH_INTERVAL <- 1.0
@@ -134,7 +133,7 @@ check_join(n1,core15,"static bedside ")
 #### TIME VARYING VARIABLES ####
 
 # bedside and lab data
-bed_labs_vars <- names(bed_lab_data_15)[!names(bed_lab_data_15) %in% 
+bed_labs_vars <- names(bed_lab_data_15)[!names(bed_lab_data_15) %in%
                                           c(names(core15),
                                             "hr","dy","tos_hr","time","timeofday_hr")]
 bed_labs_vars <- c("icustay_id","tstep",bed_labs_vars)
@@ -149,7 +148,7 @@ setkey(insulin_infusion_15,icustay_id, insulin_infusion_start, insulin_infusion_
 insulin_infusion_15 <- foverlaps(core15[,c("icustay_id","start_tstep","end_tstep")],
                                  insulin_infusion_15,
                   by.x=c("icustay_id", "start_tstep","end_tstep"),
-                  nomatch=NULL) 
+                  nomatch=NULL)
 # summarise by tstep
 setnafill(insulin_infusion_15,type="const",fill=0,
           cols=names(insulin_infusion_15)[grep("rate|amount",names(insulin_infusion_15))])
@@ -182,7 +181,7 @@ setkeyv(mechvent_times,cols=c("icustay_id","vent_start","vent_end"))
 mechvent_times <- foverlaps(core15[,c("icustay_id","start_tstep","end_tstep")],
                  mechvent_times,
                        by.x=c("icustay_id", "start_tstep","end_tstep"),
-                       nomatch=NULL) 
+                       nomatch=NULL)
 mechvent_times[,ventilated := 1]
 mechvent_times[,time_ventilated := pmax(start_tstep - vent_start,0)]
 mechvent_times <- mechvent_times[,.(time_ventilated = max(time_ventilated),
@@ -243,7 +242,7 @@ nutrition <- nutrition[nutr_end >= nutr_start]
 setkey(nutrition,icustay_id, nutr_start, nutr_end)
 nutrition <- foverlaps(core15[,c("icustay_id","start_tstep","end_tstep")],nutrition,
                   by.x=c("icustay_id", "start_tstep","end_tstep"),
-                  nomatch=NULL) 
+                  nomatch=NULL)
 setnafill(nutrition,type="const",fill=0)
 # summarise by tstep
 nutrition[,w1 := pmin(nutr_end - nutr_start)]
@@ -271,7 +270,7 @@ enteral <- enteral[ent_end >= ent_start]
 setkey(enteral,icustay_id, ent_start, ent_end)
 enteral <- foverlaps(core15[,c("icustay_id","start_tstep","end_tstep")],enteral,
                        by.x=c("icustay_id", "start_tstep","end_tstep"),
-                       nomatch=NULL) 
+                       nomatch=NULL)
 #setnafill(enteral,type="const",fill=0)
 # summarise by tstep
 enteral[,w1 := ent_end - ent_start]
@@ -301,7 +300,7 @@ vaso <- vaso[starttime < endtime]
 setkey(vaso,icustay_id, vaso_start, vaso_end)
 vaso <- foverlaps(core15[,c("icustay_id","start_tstep","end_tstep")],vaso,
           by.x=c("icustay_id", "start_tstep","end_tstep"),
-          nomatch=NULL) 
+          nomatch=NULL)
 # summarise by tstep
 setnafill(vaso,type="const",fill=0,cols=names(vaso)[grep("rate|amount",names(vaso))])
 vaso[,w1 := pmin(vaso_end - vaso_start)]
@@ -318,7 +317,7 @@ check_join(n1,core15,"vaso");rm(vaso);gc()
 
 # fluid output
 output <- fread_ids("data/raw/output_hourly_202003131320.csv","icustay_id",core15$icustay_id)
-output[,tstep := ceiling(hr/LENGTH_INTERVAL)] 
+output[,tstep := ceiling(hr/LENGTH_INTERVAL)]
 output <- output[,.(urineoutput = sum(urineoutput)),by=.(icustay_id,tstep)]
 core15 <- merge(core15,output,by=c("icustay_id","tstep"),all.x=TRUE)
 check_join(n1,core15,"urine");rm(output);gc()
@@ -449,7 +448,7 @@ cat(lobstr::obj_size(core15)/1e9,"GB\n")
 
 # 0B) FEATURES ----------------------------------------------------------------------------
 
-source("scripts/gp-discrete/gp-variable-lists.R")
+source("scripts/gp-variable-lists.R")
 
 # glucose variables
 core15[,glucose := NULL]
@@ -486,7 +485,7 @@ glycaemic_data <- cbind(glycaemic_data,glycaemic_data_pt_vars)
 
 # 0C) 70/30 PATIENT SPLIT -----------------------------------------------------------------
 
-# # 
+# #
 # bg_by_pt <- glycaemic_data[!is.na(glucose_b),.(.N),by=icustay_id][order(N)]
 # glycaemic_data <- glycaemic_data[icustay_id %in% bg_by_pt[N >= 3,icustay_id]]
 
@@ -495,7 +494,7 @@ patients <- glycaemic_data[,.(.N,los=mean(los_dy),tpn=sum(xx_tpn > 0,na.rm=TRUE)
 patients$Ncat <- cut(patients$N,c(0,1,2,3,4,5,10,20,50,100,1000,Inf),right=FALSE)
 table(patients$Ncat)
 
-# sample 
+# sample
 set.seed(1234)
 Np <- nrow(patients)
 patients[,test := rbinom(Np,1,0.3)]
@@ -567,23 +566,23 @@ saveRDS(glycaemic_test,file = paste0(fname,".rds"),compress=FALSE)
 # 1A) IMPORT DATA ------------------------------------------------------------------------
 
 # tpn_patients <- unique(glycaemic_data[xx_tpn > 0,icustay_id])
-# 
+#
 # # 0C) 70/30 PATIENT SPLIT -----------------------------------------------------------------
-# 
+#
 # # done above
-# 
+#
 # # 1E) VARIABLE CATEGORIES ------------------------------------------------------------------
-# 
-# 
+#
+#
 # # 1F) SAVE -------------------------------------------------------------------------------
-# 
+#
 # # train
 # fname <- paste0("data/processed/glycaemic_train_tpn_mvonly_dtime_",
 #                 gsub(pattern = "[\\.]",replacement = "_",x = LENGTH_INTERVAL))
 # fwrite(glycaemic_train[icustay_id %in% tpn_patients],file = paste0(fname,".csv"))
 # saveRDS(glycaemic_train[icustay_id %in% tpn_patients],file = paste0(fname,".rds"),compress=FALSE)
 # #saveRDS(xx_train[xx_train[,'icustay_id'] %in% tpn_patients,],file = paste0(fname,"_matrix",".rds"),compress=FALSE)
-# 
+#
 # # test
 # fname <- paste0("data/processed/glycaemic_test_tpn_mvonly_dtime_",
 #                 gsub(pattern = "[\\.]",replacement = "_",x = LENGTH_INTERVAL))
